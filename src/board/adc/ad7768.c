@@ -1,0 +1,193 @@
+#include <stdio.h>
+#include <unistd.h>
+#include "ad7768.h"
+
+#define AD7768_GPO_RESET_MASk   0x0001
+#define AD7768_GPO_START_MASk   0x0002
+
+#define AD7768_GPO_BASEADDR     0x00010000
+#define AD7768_SPI_BASEADDR     0x00020000
+#define FIR_GPIO_BASEADDR      0x00080000
+#define TRI_IO_BASEADDR      0x00050000
+#define TRI_SEL_BASEADDR     0x00060000
+
+void freqfir_select(void *base_addr, uint32_t regVal) {
+    uintptr_t base = (uintptr_t)base_addr;
+
+    XGpio_WriteReg(base + FIR_GPIO_BASEADDR, XGPIO_TRI_OFFSET, 0x00);
+    XGpio_WriteReg(base + FIR_GPIO_BASEADDR, XGPIO_DATA_OFFSET, regVal);
+
+}
+void tri_io_set_input(void *base_addr) {
+    uintptr_t base = (uintptr_t)base_addr;
+
+    XGpio_WriteReg(base + TRI_IO_BASEADDR, XGPIO_TRI_OFFSET, 0xFE);
+    XGpio_WriteReg(base + TRI_IO_BASEADDR, XGPIO_DATA_OFFSET, 0xFF);
+
+    usleep(1000);
+    XGpio_WriteReg(base + TRI_IO_BASEADDR, XGPIO_DATA_OFFSET, 0x00);
+
+    usleep(1000);
+    XGpio_WriteReg(base + TRI_IO_BASEADDR, XGPIO_DATA_OFFSET, 0xFF);
+
+    XGpio_WriteReg(base + TRI_IO_BASEADDR, XGPIO_TRI_OFFSET, 0xFF);
+}
+
+void ad7768_enable(void *base_addr)
+{
+    uintptr_t base = (uintptr_t)base_addr;
+
+    printf("--> AD7768 ENABLED.\n");
+
+    XGpio_WriteReg(base + AD7768_GPO_BASEADDR, XGPIO_TRI_OFFSET, 0x0);
+    XGpio_WriteReg(base + AD7768_GPO_BASEADDR, XGPIO_DATA_OFFSET, AD7768_GPO_START_MASk | AD7768_GPO_RESET_MASk);
+
+}
+
+void ad7768_disable(void *base_addr)
+{
+    uintptr_t base = (uintptr_t)base_addr;
+
+    printf("--> AD7768 DISABLED.\n");
+
+    XGpio_WriteReg(base + AD7768_GPO_BASEADDR, XGPIO_TRI_OFFSET, 0x0);
+    XGpio_WriteReg(base + AD7768_GPO_BASEADDR, XGPIO_DATA_OFFSET, AD7768_GPO_START_MASk);
+}
+
+void ad7768_start_signal(void *base_addr)
+{
+    uintptr_t base = (uintptr_t)base_addr;
+
+    XGpio_WriteReg(base + AD7768_GPO_BASEADDR, XGPIO_TRI_OFFSET, 0x0);
+    XGpio_WriteReg(base + AD7768_GPO_BASEADDR, XGPIO_DATA_OFFSET, AD7768_GPO_RESET_MASk);
+
+    usleep(1000);
+
+    XGpio_WriteReg(base + AD7768_GPO_BASEADDR, XGPIO_TRI_OFFSET, 0x0);
+    XGpio_WriteReg(base + AD7768_GPO_BASEADDR, XGPIO_DATA_OFFSET, AD7768_GPO_START_MASk | AD7768_GPO_RESET_MASk);
+}
+
+static u16 ad7768_spi_trans(uintptr_t base, u16 buf)
+{
+    u32 Control;
+    u16 Buffer;
+
+    Buffer = buf;
+
+    XSpi_WriteReg(base + AD7768_SPI_BASEADDR, XSP_SRR_OFFSET,
+            XSP_SRR_RESET_MASK);
+    XSpi_WriteReg(base + AD7768_SPI_BASEADDR, XSP_SSR_OFFSET, 0x01);
+
+    /*
+     * Set up the device in enable master mode.
+     */
+    Control = XSpi_ReadReg(base + AD7768_SPI_BASEADDR, XSP_CR_OFFSET);
+    Control |= (XSP_CR_MASTER_MODE_MASK);
+    XSpi_WriteReg(base + AD7768_SPI_BASEADDR, XSP_CR_OFFSET, Control);
+
+    XSpi_WriteReg(base + AD7768_SPI_BASEADDR, XSP_SSR_OFFSET, 0x00);
+
+
+    /*
+     * Fill up the transmitter with data, assuming the receiver can hold
+     * the same amount of data.
+     */
+    while ((XSpi_ReadReg(base + AD7768_SPI_BASEADDR, XSP_SR_OFFSET) &
+            XSP_SR_TX_FULL_MASK) == 0) {
+        XSpi_WriteReg((base + AD7768_SPI_BASEADDR), XSP_DTR_OFFSET,
+                Buffer);
+    }
+
+    /*
+     * Enable the device.
+     */
+    Control = XSpi_ReadReg(base + AD7768_SPI_BASEADDR, XSP_CR_OFFSET);
+    Control |= XSP_CR_ENABLE_MASK;
+    Control &= ~XSP_CR_TRANS_INHIBIT_MASK;
+    XSpi_WriteReg(base + AD7768_SPI_BASEADDR, XSP_CR_OFFSET, Control);
+
+    /*
+     * Initialize the buffer with zeroes so that it can be used to receive
+     * data.
+     */
+    Buffer = 0;
+
+    /*
+     * Wait for the transmit FIFO to transition to empty before checking
+     * the receive FIFO, this prevents a fast processor from seeing the
+     * receive FIFO as empty
+     */
+    while (!(XSpi_ReadReg(base + AD7768_SPI_BASEADDR, XSP_SR_OFFSET) &
+                    XSP_SR_TX_EMPTY_MASK));
+
+    /*
+     * Transmitter is full, now receive the data just looped back until
+     * the receiver is empty.
+     */
+    while ((XSpi_ReadReg(base + AD7768_SPI_BASEADDR, XSP_SR_OFFSET) &
+            XSP_SR_RX_EMPTY_MASK) == 0) {
+        Buffer = XSpi_ReadReg((base + AD7768_SPI_BASEADDR),
+                        XSP_DRR_OFFSET);
+    }
+
+    XSpi_WriteReg(base + AD7768_SPI_BASEADDR, XSP_SSR_OFFSET, 0x01);
+
+    return Buffer;
+}
+
+u8 ad7768_reg_read(uintptr_t base, u8 addr)
+{
+    u16 buf;
+
+    addr |= 0x80;
+    buf = (addr << 8) & 0xFF00;
+
+    ad7768_spi_trans(base, buf);
+
+    return ad7768_spi_trans(base, buf);
+}
+
+void ad7768_reg_write(uintptr_t base, u8 addr, u8 data)
+{
+    u16 buf;
+
+    buf = (addr << 8) & 0xFF00;
+    buf = buf | data;
+
+    ad7768_spi_trans(base, buf);
+}
+
+int ad7768_init(void *base_addr, uint32_t decRate)
+{
+    uintptr_t base = (uintptr_t)base_addr;
+
+    u8 reg = ad7768_reg_read(base, 0x0A);
+    printf("--> AD7768 Revsion ID: 0x%02x\n", reg);
+
+    if(decRate == 32){
+        ad7768_reg_write(base, 0x01, 0x00);
+    }else if(decRate == 64){
+        ad7768_reg_write(base, 0x01, 0x01);
+    }else if(decRate == 128){
+        ad7768_reg_write(base, 0x01, 0x02);
+    }else if(decRate == 256){
+        ad7768_reg_write(base, 0x01, 0x03);
+    }else if(decRate == 512){
+        ad7768_reg_write(base, 0x01, 0x04);
+    }else{
+        ad7768_reg_write(base, 0x01, 0x05);}
+
+
+    ad7768_reg_write(base, 0x07, 0x03);
+    ad7768_reg_write(base, 0x0E, 0x9F);  //set GPIO output
+    ad7768_reg_write(base, 0x04, 0x3B);
+    return 0;
+}
+
+void ad7768_start_SW(void *base_addr)
+{
+    uintptr_t base = (uintptr_t)base_addr;
+
+    ad7768_reg_write(base, 0x06, 0x00);
+    ad7768_reg_write(base, 0x06, 0x80);
+}

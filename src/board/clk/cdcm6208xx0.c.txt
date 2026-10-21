@@ -1,0 +1,191 @@
+/*
+ * cdcm6208xx.c
+ *
+ *  Created on: 2022Äê4ÔÂ14ÈÕ
+ *      Author: biseadmin
+ */
+
+#include "xgpio.h"
+#include "xparameters.h"
+#include "xspi.h"
+
+#include <stdio.h>
+#include <unistd.h>
+
+#define CDCM6208_BaseAddress        0x00040000
+#define CDCM6208_GPIO_BaseAddress   0x00030000
+
+#define CDCM6208_GPIO_PDN       0x0004
+#define CDCM6208_GPIO_RST       0x0002
+#define CDCM6208_GPIO_SYNC      0x0001
+
+void cdcm6208_enable(void *base_addr)
+{
+    uintptr_t base = (uintptr_t) base_addr;
+
+    XGpio_WriteReg(base + CDCM6208_GPIO_BaseAddress, XGPIO_TRI_OFFSET, 0x0);
+    XGpio_WriteReg(
+            base + CDCM6208_GPIO_BaseAddress, XGPIO_DATA_OFFSET,
+            (CDCM6208_GPIO_PDN | CDCM6208_GPIO_RST /*| CDCM6208_GPIO_SYNC*/));
+}
+
+void cdcm6208_disable(void *base_addr)
+{
+    uintptr_t base = (uintptr_t) base_addr;
+
+    XGpio_WriteReg(base + CDCM6208_GPIO_BaseAddress, XGPIO_TRI_OFFSET, 0x0);
+    XGpio_WriteReg(base + CDCM6208_GPIO_BaseAddress, XGPIO_DATA_OFFSET, 0);
+}
+
+static void cdcm6208_output(uintptr_t base)
+{
+    XGpio_WriteReg(base + CDCM6208_GPIO_BaseAddress, XGPIO_TRI_OFFSET, 0x0);
+    XGpio_WriteReg(base + CDCM6208_GPIO_BaseAddress, XGPIO_DATA_OFFSET,
+                   CDCM6208_GPIO_PDN | CDCM6208_GPIO_RST| CDCM6208_GPIO_SYNC);
+}
+
+static u16 cdcm6208_spi_trans(uintptr_t base, u32 buf)
+{
+    u32 Control;
+    u32 Buffer;
+
+    Buffer = buf;
+
+    XSpi_WriteReg(base + CDCM6208_BaseAddress, XSP_SRR_OFFSET,
+                  XSP_SRR_RESET_MASK);
+    XSpi_WriteReg(base + CDCM6208_BaseAddress, XSP_SSR_OFFSET, 0x01);
+
+    /*
+     * Set up the device in enable master mode.
+     */
+    Control = XSpi_ReadReg(base + CDCM6208_BaseAddress, XSP_CR_OFFSET);
+    Control |= (XSP_CR_MASTER_MODE_MASK);
+    XSpi_WriteReg(base + CDCM6208_BaseAddress, XSP_CR_OFFSET, Control);
+
+    XSpi_WriteReg(base + CDCM6208_BaseAddress, XSP_SSR_OFFSET, 0x00);
+
+    /*
+     * Fill up the transmitter with data, assuming the receiver can hold
+     * the same amount of data.
+     */
+    while ((XSpi_ReadReg(base + CDCM6208_BaseAddress, XSP_SR_OFFSET) &
+    XSP_SR_TX_FULL_MASK) == 0)
+    {
+        XSpi_WriteReg((base + CDCM6208_BaseAddress), XSP_DTR_OFFSET, Buffer);
+    }
+
+    /*
+     * Enable the device.
+     */
+    Control = XSpi_ReadReg(base + CDCM6208_BaseAddress, XSP_CR_OFFSET);
+    Control |= XSP_CR_ENABLE_MASK;
+    Control &= ~XSP_CR_TRANS_INHIBIT_MASK;
+    XSpi_WriteReg(base + CDCM6208_BaseAddress, XSP_CR_OFFSET, Control);
+
+    /*
+     * Initialize the buffer with zeroes so that it can be used to receive
+     * data.
+     */
+    Buffer = 0;
+
+    /*
+     * Wait for the transmit FIFO to transition to empty before checking
+     * the receive FIFO, this prevents a fast processor from seeing the
+     * receive FIFO as empty
+     */
+    while (!(XSpi_ReadReg(base + CDCM6208_BaseAddress, XSP_SR_OFFSET) &
+    XSP_SR_TX_EMPTY_MASK))
+        ;
+
+    /*
+     * Transmitter is full, now receive the data just looped back until
+     * the receiver is empty.
+     */
+    while ((XSpi_ReadReg(base + CDCM6208_BaseAddress, XSP_SR_OFFSET) &
+    XSP_SR_RX_EMPTY_MASK) == 0)
+    {
+        Buffer = XSpi_ReadReg((base + CDCM6208_BaseAddress), XSP_DRR_OFFSET);
+    }
+
+    XSpi_WriteReg(base + CDCM6208_BaseAddress, XSP_SSR_OFFSET, 0x01);
+
+    return (Buffer & 0xFFFF);
+}
+
+u16 cdcm6208_read(uintptr_t base, u16 addr)
+{
+    u32 buf = (0x8000 | addr) << 16;
+    return cdcm6208_spi_trans(base, buf);
+}
+
+void cdcm6208_write(uintptr_t base, u32 addr_data)
+{
+    cdcm6208_spi_trans(base, addr_data);
+}
+
+u32 reg_tab_13M1[21] = { 0x000001B9, 0x0001018C, 0x00023A82, 0x00030070,
+                         0x000420D7, 0x00050199, 0x00060000, 0x00070199,
+                         0x00080000, 0x00090011, 0x000A0000, 0x000B0000,
+                         0x000C00D1, 0x000D0000, 0x000E0000, 0x000F0013,
+                         0x001003A0, 0x00110000, 0x00120053, 0x001303A0,
+                         0x00140000 };
+
+u32 reg_tab_26M2[21] = { 0x00000239, 0x000100C4, 0x00021C82, 0x00030070,
+                         0x000420D7, 0x00050199, 0x00060000, 0x00070199,
+                         0x00080000, 0x00090011, 0x000A0000, 0x000B0000,
+                         0x000C00D1, 0x000D0000, 0x000E0000, 0x000F0011,
+                         0x001001C0, 0x00110000, 0x00120053, 0x001301C0,
+                         0x00140000 };
+
+u32 reg_tab_26M2144[21] = { 0x000001B1, 0x000130D3, 0x00029FFF, 0x00030070,
+                            0x000420D7, 0x00050199, 0x00060000, 0x00070199,
+                            0x00080000, 0x00090011, 0x000A0000, 0x000B0000,
+                            0x000C00D1, 0x000D0000, 0x000E0000, 0x000F0013,
+                            0x001001C0, 0x00110000, 0x00120053, 0x001301C0,
+                            0x00140000 };
+
+int cdcm6208_init(void *base_addr, int sampleRate)
+{
+
+    uintptr_t base = (uintptr_t) base_addr;
+    int n_max = 100;
+
+    printf("--> CDCM6208 CLOCK CONFIG TO...\n");
+
+
+    if(sampleRate == 6400 )
+    {
+        for (int i = 0; i < 21; i++)
+        {
+            cdcm6208_write(base, reg_tab_13M1[i]);
+        }
+    }
+    else if(sampleRate == 12800 )
+    {
+        for (int i = 0; i < 21; i++)
+        {
+            cdcm6208_write(base, reg_tab_26M2[i]);
+        }
+    }
+
+    for (int i = 0; i < n_max; i++)
+    {
+        usleep(100000);
+        u16 reg = cdcm6208_read(base, 21);
+        if (!(reg & 0x0004))
+        {
+            printf("--> CDCM6208 PLL LOCKED!\n");
+            break;
+        }
+
+        if(i == (n_max -1))
+        {
+            printf("--> CDCM6208 PLL FAILED!!!!!!!!!!!!!!!\n");
+            return -1;
+        }
+    }
+
+    cdcm6208_output(base);
+
+    return 0;
+}

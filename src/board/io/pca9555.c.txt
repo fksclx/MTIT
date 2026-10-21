@@ -1,0 +1,99 @@
+/*
+ * pca9555.c
+ *
+ *  Created on: 2022Äê4ÔÂ20ÈÕ
+ *      Author: biseadmin
+ */
+
+#include "xiic.h"
+#include "xparameters.h"
+
+#include <stdio.h>
+#include <unistd.h>
+
+#define GERENAL_I2C_BASEADDR 0x00070000
+
+u8 pca9555_read(uintptr_t base, u8 addr_7bit, u8 cmd_byte)
+{
+    int ByteCount;
+    u8 data;
+
+    XIic_Send(base + GERENAL_I2C_BASEADDR, addr_7bit, &cmd_byte, 1, XIIC_STOP);
+    ByteCount = XIic_Recv(base + GERENAL_I2C_BASEADDR, addr_7bit, &data, 1, XIIC_STOP);
+
+    if(ByteCount != 1)
+        return -1;
+
+    return data;
+}
+
+void pca9555_write(uintptr_t base, u8 addr_7bit, u8 cmd_byte, u8 data)
+{
+    u8 sendBuf[2];
+
+    sendBuf[0] = cmd_byte;
+    sendBuf[1] = data;
+
+    XIic_Send(base + GERENAL_I2C_BASEADDR, addr_7bit, sendBuf, 2, XIIC_STOP);
+}
+
+void pca9555_init(void *base_addr, uint8_t chip_id)
+{
+    uintptr_t base = (uintptr_t) base_addr;
+
+    //output reg set 0
+    pca9555_write(base, chip_id, 0x02, 0x0);
+    pca9555_write(base, chip_id, 0x03, 0x0);
+
+    //enable pin as output
+    pca9555_write(base, chip_id, 0x06, 0x0);
+    pca9555_write(base, chip_id, 0x07, 0x0);
+
+//    printf("--> PCA9555 0x%02x set output logic 0.\n", chip_id);
+}
+
+void pca9555_pin_set(void *base_addr, uint8_t chip_id, uint8_t pinset, uint8_t pinnum)
+{
+    uintptr_t base = (uintptr_t) base_addr;
+    u8 reg;
+
+    if(pinset == 0)
+        reg = 0x02;
+    else if(pinset == 1)
+        reg = 0x03;
+    else
+        return;
+
+    u8 regval = pca9555_read(base, chip_id, reg);
+    u8 mask = 1 << pinnum;
+
+    regval |= mask;
+
+    pca9555_write(base, chip_id, reg, regval);
+
+    regval = pca9555_read(base, chip_id, reg);
+//    printf("--> PCA9555: reg 0x%02x: 0x%02x\n", reg, regval);
+}
+
+void pca9555_pin_clr(void *base_addr, uint8_t chip_id, uint8_t pinset, uint8_t pinnum)
+{
+    uintptr_t base = (uintptr_t) base_addr;
+    u8 reg;
+
+    if(pinset == 0)
+        reg = 0x02;
+    else if(pinset == 1)
+        reg = 0x03;
+    else
+        return;
+
+    u8 regval = pca9555_read(base, chip_id, reg);
+    u8 mask = 1 << pinnum;
+
+    regval &= (~mask);
+
+    pca9555_write(base, chip_id, reg, regval);
+
+    regval = pca9555_read(base, chip_id, reg);
+//    printf("--> PCA9555: reg 0x%02x: 0x%02x\n", reg, regval);
+}

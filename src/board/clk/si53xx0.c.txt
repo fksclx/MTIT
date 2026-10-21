@@ -1,0 +1,125 @@
+#include "si53xx.h"
+#include "xdma.h"
+#include "xiic.h"
+#include "xparameters.h"
+
+#include <stdio.h>
+#include <unistd.h>
+
+#include "freq.h"
+
+#define SI53XX_I2C_BASEADDR 0x00020000
+#define SI53XX_7BIT_ADDR    0x68
+
+#define SI53XX_GPO_RESET_MASK  0x00000001
+#define SI53XX_GPO_CMODE_MASK  0x00000002
+#define SI53XX_GPO_CS_MASK     0x00000004
+#define SI53XX_GPO_A0_MASK     0x00000008
+#define SI53XX_GPO_A1_MASK     0x00000010
+#define SI53XX_GPO_A2_MASK     0x00000020
+#define SI53XX_GPO_SDI_MASK    0x00000040
+
+void si53xx_enable(uintptr_t base)
+{
+    XIic_ResetM(base + SI53XX_I2C_BASEADDR);
+    usleep(1000);
+
+    XIic_SetGpo(base + SI53XX_I2C_BASEADDR, SI53XX_GPO_RESET_MASK);
+}
+
+void si53xx_disable(uintptr_t base)
+{
+    XIic_SetGpo(base + SI53XX_I2C_BASEADDR, 0x0);
+}
+
+uint8_t si53xx_read(uintptr_t base, uint8_t addr)
+{
+    int ByteCount;
+    uint8_t data;
+
+    XIic_Send(base + SI53XX_I2C_BASEADDR, SI53XX_7BIT_ADDR, &addr, 1, XIIC_STOP);
+    ByteCount = XIic_Recv(base + SI53XX_I2C_BASEADDR, SI53XX_7BIT_ADDR, &data, 1, XIIC_STOP);
+
+    if(ByteCount != 1)
+        return -1;
+
+    return data;
+}
+
+int si53xx_write(uintptr_t base, uint8_t addr, uint8_t data)
+{
+    int ByteCount;
+    uint8_t sendBuf[2];
+
+    sendBuf[0] = addr;
+    sendBuf[1] = data;
+
+    ByteCount = XIic_Send(base + SI53XX_I2C_BASEADDR, SI53XX_7BIT_ADDR, sendBuf, 2, XIIC_STOP);
+    if(ByteCount != 2)
+        return -1;
+
+    return 0;
+}
+
+int si53xx_init(void *base_addr, int sampleRate)
+{
+    u8 addr, data;
+    u8 *reg_tab;
+    uintptr_t base = (uintptr_t)base_addr;
+    int n_max = 100;
+
+    if (sampleRate == 12800)
+        reg_tab = reg_map_26_2;
+    else if (sampleRate == 6400)
+        reg_tab = reg_map_13_1;
+    else
+        printf("wrong sampleRate\n");
+
+    si53xx_enable(base);
+    usleep(1000);
+
+    printf("--> SI53xx CLOCK CONFIG TO...\n");
+
+    for(int i = 0; i < 62; i = i + 2) {
+        addr = reg_tab[i];
+        data = reg_tab[i+1];
+
+        si53xx_write(base, addr, data);
+    }
+
+    /* wait for PLL lock */
+//    usleep(400000);
+
+    for (int i = 0; i < n_max; i++)
+    {
+        usleep(100000);
+        u16 reg = si53xx_read(base, 130);
+        if (!(reg != 0))
+        {
+            printf("--> SI53xx PLL LOCKED!\n");
+            break;
+        }
+
+        if(i == (n_max -1))
+        {
+            printf("--> SI53xx PLL FAILED!!!!!!!!!!!!!!!\n");
+            return -1;
+        }
+    }
+
+//    addr = 130;
+//    data = si53xx_read(base, addr);
+//    if(data != 0){
+//        printf("--> SI53xx PLL FAILED!\n");
+//    }
+//    else
+//        printf("--> SI53xx PLL LOCKED!\n");
+
+    return 0;
+}
+
+void si53xx_term(void *base_addr)
+{
+    uintptr_t base = (uintptr_t)base_addr;
+    si53xx_disable(base);
+}

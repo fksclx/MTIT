@@ -1,0 +1,2 @@
+protoc --cpp_out=./ CommunicationProtocols_UDR.proto
+protoc-c --c_out=./ Daq_V0.4.proto

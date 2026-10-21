@@ -1,0 +1,253 @@
+﻿//Version = 01
+syntax = "proto2";
+///////////////////////////////////////////////////////////////////
+//通道信息
+message ChnlParamsStrm
+{
+	required int32   chnlIndex_Device = 1;//通道在设备中的index
+	required int32   chnlIndex_Card = 2;	//通道在板卡中的index
+	required int32   chnl_CardIndex = 3;	//通道所属的板卡
+	required string  strChnlName = 4;//名称
+	required string  strSenserType = 5;//采集量字符串 测量类型 AC ICP DC 
+	required string  strPhysicType = 6;//物理量字符串 电压
+	required float   upLimit = 7;//超限上限
+	required float   lowLimit = 8;//超限下限
+	required float   kCoff = 9;//上位机的k
+	required float   bCoff = 10;//上位机的b
+	required float   fSensitivity = 11; //灵敏度
+	required string  strRange = 12;//量程 电压
+	required string  strUnit = 13;//单位
+	required int32   bDaqEnable = 14;//启用采集
+	required int32   bStoreEnable = 15;//启用存储
+	required int32   bLimitEnable = 16;//启用超限
+	required string  strSamplingRate = 17;//采样率
+	required string  strLowFilter = 18;//滤波器档位
+	required string  strBridgeMode = 19;//桥路 全桥 半桥 1/4桥
+	required string  strBridgeResistance = 20;//电桥电阻 120 350 1000
+	required string strImpValue = 21;//激励电压
+	required string strImpUnit = 22;//激励电压单位	
+	required float fCompensationResistance = 23;//线组补偿
+	required float fShuntCalCoeff = 24;//分流校准后的K值
+	required float fZeroCoeff = 25;//调零计算值
+	// 数字量扩展（optional，旧版忽略）
+	optional int32  dioActionType  = 28;  // 类型 0=输入 1=输出
+	optional int32  dioTriggerHigh = 30;  // 触发 1=真 0=假
+	optional string strDioAction   = 31;  // 动作
+}
+///////////////////////////////////////////////////////////////////
+//标定信息
+message CalibParamsStrm
+{
+	required int32   chnlIndex_device = 1;//通道在设备中的index
+	required int32   chnlIndex_Card = 2;	//通道在板卡中的index
+	required int32   chnl_CardIndex = 3;	//通道所属的板卡
+	required string  strChnlName = 4;//名称
+	required float   AC_kCalib = 5;//板卡的k
+	required float   AC_bCalib = 6;//板卡的b
+	required float   DC_kCalib = 7;//板卡的k
+	required float   DC_bCalib = 8;//板卡的b
+	required float   ICP_kCalib = 9;//板卡的k
+	required float   ICP_bCalib = 10;//板卡的b
+}
+///////////////////////////////////////////////////////////////////
+//标定全部通道信息
+message CalibParamsStrms
+{
+	repeated CalibParamsStrm calibDef = 1;//多个通道标定信息
+}
+///////////////////////////////////////////////////////////////////
+//设备信息包含多通道信息
+message DeviceParamsStrm
+{
+	repeated ChnlParamsStrm chnlDef = 1;//多个设备通道信息
+}
+///////////////////////////////////////////////////////////////////
+message LoopCurveParamStrm
+{
+	required int32 index = 1;//节点序号（从1开始）
+	required double t = 2;//时间
+	required double y = 3;//目标值
+	optional string unit = 4;//曲线单位
+}
+///////////////////////////////////////////////////////////////////
+//控制回路参数（字段按功能分组，与试验值表格列顺序一致）
+message LoopParamsStrm
+{
+	// 回路基本
+	required int32 loop_index = 1;//回路 id
+	required int32 enabled = 2;//使能
+
+	// 通道绑定（设备通道 index，与 ChnlParamsStrm.chnlIndex_Device 一致）
+	required int32 output_chnl = 3;//输出通道（DA1608 物理 DA，IndexInCard 0~7）
+	optional int32 target_chnl = 24;//目标通道（DA1608 影子通道，通常为 output_chnl + 8；非 DA 输出可不填）
+	optional int32 error_chnl = 26;//误差通道（DA1608 影子通道，通常为 output_chnl + 16；非 DA 输出可不填）
+	optional int32 qr_chnl = 27;//QR 通道（DA1608 影子通道，通常为 output_chnl + 24；非 DA 输出可不填）
+	required int32 feedback_chnl = 4;//反馈通道
+	repeated int32 acquire_chnls = 5;//采集通道 1~4
+
+	// 控制算法
+	required string algorithm = 6;//控制算法名称
+
+	// PID / 算法形参
+	optional float pid_p = 7;//P
+	optional float pid_i = 8;//I
+	optional float pid_d = 9;//D
+	optional float param1 = 10;//算法形参 Par1（滤波等，试验中可热更新）
+	optional float param2 = 11;//算法形参 Par2
+	optional float param3 = 12;//算法形参 Par3
+	optional float param4 = 13;//算法形参 Par4
+
+	// 输出电压限幅
+	optional float voltage_limit = 14;//电压高限值
+	optional float voltage_low_limit = 15;//电压低限值
+
+	// 控制曲线
+	optional int32 active_curve_index = 16;//当前控制曲线 index：0=curve1，1=curve2
+	optional float curve1_coeff = 17;//控制曲线系数 1
+	optional float curve2_coeff = 18;//控制曲线系数 2
+	optional float condition_coeff = 19;//工况系数
+	repeated LoopCurveParamStrm curve1 = 20;//控制曲线 1 点列
+	repeated LoopCurveParamStrm curve2 = 21;//控制曲线 2 点列
+
+	// 手动输出
+	optional int32 manual_mode = 22;//0=自动控制曲线 1=手动输出值（含开路开环）
+	optional float manual_output_value = 23;//手动输出值
+	optional int32 di_bool = 25;//算法分支 DI1：0=关 1=开（回路变量）
+}
+///////////////////////////////////////////////////////////////////
+//试验中热更新回路参数（正式试验值表格列，从 LoopParamsStrm 摘取）
+message HotLoopParamsStrm
+{
+	required int32 loop_index = 1;//回路 id
+	optional float pid_p = 2;//P
+	optional float pid_i = 3;//I
+	optional float pid_d = 4;//D
+	optional float param1 = 5;//参数1
+	optional float param2 = 6;//参数2
+	optional float param3 = 7;//参数3
+	optional float param4 = 8;//参数4
+	optional int32 feedback_chnl = 9;//反馈通道（设备 index）
+	optional int32 active_curve_index = 10;//当前控制曲线：0=curve1，1=curve2
+	optional int32 manual_mode = 11;//0=自动控制曲线 1=手动输出值
+	optional float manual_output_value = 12;//手动输出值
+	optional int32 di_bool = 13;//算法分支 DI1：0=关 1=开
+}
+///////////////////////////////////////////////////////////////////
+//算法库独立下发（与控制回路 LoopSettings 解耦）
+message AlgorithmDeployStrm
+{
+	required string algorithm_name = 1;//算法名称
+	required string template_id = 2;//模板标识 AlgorithmA / AlgorithmD
+	required float t_threshold = 4;//if t < 常量
+	required float du_init = 5;//du = 常量
+	required float output_init = 6;//Output = 常量
+	required float du_div_p = 7;//du-P 分母常量
+	required float du_div_i = 8;//du-I 分母常量
+	required float du_diff_coeff = 9;//du-差分系数
+	required float pv1_out = 10;//if PV1_out < 常量
+	required float hw_offset = 11;//HW 偏移常量
+	required float hw_coeff = 12;//HW 系数
+}
+///////////////////////////////////////////////////////////////////
+//设备状态参数
+message DeviceStateStrm
+{
+	required int32 PlanState = 1; //计划状态 0无计划 1准备开始 2准备结束
+	required int32 DaqState = 2; //采集状态
+	required int32 SaveState = 3;//存储状态
+	required int32 ElecState = 4;//电状态 0地 1D
+	required int64 startDaqTime = 5;//计划开始时间
+	required int64 finishDaqTime = 6;//计划结束时间
+	required int64 syncTime = 7;//同步时间
+	required int32 LimitState = 8;//超限开启
+	required int32 clockstate = 9;//时钟触发 0本地 1外部
+	optional int32 LimitPreTime = 10; //前采样时间
+	optional int32 LimitAfterTime = 11; //后采时间
+	optional string OperatingMode = 12; //当前运行模式
+}
+///////////////////////////////////////////////////////////////////
+//数据包结构体
+message DataStrm
+{
+	required int32 nDataNo = 1;
+	required int32 nDataType = 2;
+	required int32 nDeviceID = 3;
+	required int32 nChnls = 4;
+	required int64 nStartDaqTime = 5;
+	repeated ChnlParamsStrm chnlDef  = 6;//全部通道信息
+	repeated int64 nDaqTime  = 7;//本次采样第1个点的全长索引 总size-本次framesize
+	repeated int32 nFrameSize  = 8;//本次采样点数
+	repeated int32 nDataFormat  = 9;//本次采样数据类型
+	required bytes points = 10; 
+	optional int64 nLastStoreSpace = 11;
+}
+///////////////////////////////////////////////////////////////////
+//超限结构体
+message ValueStrm 
+{
+	required int32 nChnlNo = 1;
+	required float fValue = 2;
+}
+///////////////////////////////////////////////////////////////////
+//虚拟通道操作数：公式变量与物理通道绑定
+message VirtualOperandStrm
+{
+	required string symbol = 1;             // 公式变量名，如 "A1"
+	required int32 chnl_index_device = 2;   // 对应 ChnlParamsStrm.chnlIndex_Device
+}
+///////////////////////////////////////////////////////////////////
+//单条虚拟通道（下位机按 formula_text + operands 实时计算）
+message VirtualChannelStrm
+{
+	required int32 id = 1;                  // 虚拟通道 ID（对应 ChnlParamsStrm.chnlIndex_Device）
+	required string name = 2;               // 显示名，如 "合力"
+	required string formula_text = 3;       // 如 "A1+A2+A3"、"sin(A1+2)"
+	repeated VirtualOperandStrm operands = 4;  // A1/A2... 与物理通道映射
+}
+
+/////////////////////////////////////////////////////////////////////
+//上位机下发指令消息体
+message CMDStrm
+{
+	required uint32 nCMDNo = 1;  // 指令序号
+	required uint32 nCMDType = 2;  // 指令类型
+	required uint32 nMasterID = 3;  // 主机ID
+	required uint32 nDeviceID = 4;  // 设备ID
+	required int64 nExcuteTime = 5;  // 执行时刻	
+	optional DeviceParamsStrm params= 6; // 设备通道参数
+	repeated int32 zeroChannel = 7;//需要修改的调零通道index
+	repeated int32 shuntChannel = 8;//需要修改的分流校准通道index
+	repeated int32 averageChannel = 9;//需要其他操作备用的通道index
+	optional int64 syncTime = 10;//同步时间
+	optional int64 planStartTime =11;//计划开始时间
+	optional int64 planStopTime = 12;//计划结束时间
+	optional int64 preSaveTime = 13;//前采样时间长度
+	optional CalibParamsStrms calibs= 14;   //标定参数
+	optional string strSaveFileName = 15;//存储文件夹名称
+	optional int64 daqStartTime =16;//采集开始时间
+	optional int64 saveStartTime =17;//存储开始时间
+	optional int64 saveStartDelay =18;//距离存储开始时间（点数）
+	optional int32 localClock = 19; //0是本地，1是外部
+	optional string  OperatingMode= 20; //运行模式  1:开路检测  2：正式试验
+	repeated LoopParamsStrm loop_params = 21; //与 params 同包下发的控制回路列表（可空）
+	repeated AlgorithmDeployStrm algorithm_library = 23; //算法库全量下发
+	optional int32 update_param_mode = 24; // 0=全量参数 1=回路热更新（与 OperatingMode 线传二选一，优先本字段）
+	repeated VirtualChannelStrm  virtual_channels = 25; // 虚拟通道数组（下位机实时计算）
+	repeated HotLoopParamsStrm hot_loop_params = 26; // 试验中热更新回路参数（HOTUPDATEPARAM）
+}
+
+//////////////////////////////////////////////////////////////////////////
+//下位机应答消息体
+message ReplyStrm
+{  
+	required uint32 nReplyNo = 1;  // 应答序号
+	required uint32 nReplyType = 2;  // 应答类型
+	required uint32 nCMDNo = 3;  // 指令序号
+	required uint32 nDeviceID = 4;  // 设备ID
+	required uint32 nReplyTime = 5;  // 应答时刻	    
+	optional DeviceParamsStrm params= 6;   //通道参数
+	optional DeviceStateStrm  state = 7;  // 设备状态
+	optional CalibParamsStrms calibs= 8;   //标定参数
+	repeated ValueStrm chnlValue= 9;   //通道计算参数
+    repeated int32 CardInitRet = 10;    //板卡激活信息，0未激活，1激活
+}

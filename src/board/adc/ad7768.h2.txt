@@ -1,0 +1,21 @@
+
+#ifndef BOARD_ADC_AD7768_H_
+#define BOARD_ADC_AD7768_H_
+
+#include "xgpio.h"
+#include "xparameters.h"
+#include "xspi.h"
+
+void ad7768_enable(void* dev);
+void ad7768_disable(void* dev);
+
+void ad7768_start_signal(void* dev);
+
+int ad7768_init(void* dev, uint32_t decRate);
+
+void ad7768_start_SW(void* dev);
+
+void tri_io_set_input(void* dev);
+void tri_io_set_output(void* dev);
+void freqfir_select(void* dev, uint32_t regVal);
+#endif /* BOARD_ADC_AD7768_H_ */
