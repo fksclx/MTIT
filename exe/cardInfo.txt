@@ -1,0 +1,26 @@
+{
+	"cardInfo": {
+		"cardArray": [
+			{
+				"Card_Name": "card1",
+				"Card_Index": 0,
+				"Card_Slot": 0,
+				"Card_Channels": 16,
+				"Card_Model": "Card_AD_1608"
+			},
+			{
+				"Card_Name": "card2",
+				"Card_Index": 1,
+				"Card_Slot": 1,
+				"Card_Channels": 8,
+				"Card_Model": "Card_DA_1608"
+			},
+			{
+				"Card_Name": "card3",
+				"Card_Index":2,
+				"Card_Slot": 2,
+				"Card_Channels": 8,
+				"Card_Model": "Card_Digital_IO"
+			}]
+	}
+}

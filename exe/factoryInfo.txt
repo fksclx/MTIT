@@ -1,0 +1,8 @@
+{
+	"factoryInfo": {
+		"ProductName": "PXIE1",
+		"Model": "DynamicsX_PXI1616",
+		"S/N": "9b4c9135-0",
+		"ManuFactured": "702"
+	}
+}
