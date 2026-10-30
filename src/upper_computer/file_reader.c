@@ -19,8 +19,6 @@ uint64_t curfilesavelen = 0; //本次文件已用字节数
 uint64_t testfilesavelen = 0; //单次试验存储大小
 int64_t testfilesaveLastlen = 0; //可用的总存储空间
 uint64_t FILE_MAX_LEN = 512 * 1024 * 1024;
-uint64_t DISK_MIN_LEN = 128 * 1024 * 1024; //磁盘剩余空间
-extern int LOOP_TIME_NEED; //和硬件采样，一次如果采不了125ms的数，就得分多次采集  循环次数
 
 /*
  初始化iff文件，计算磁盘剩余空间，后续不再新拿
@@ -127,7 +125,8 @@ int IffFileNewDir(char *fileRoad,char* deviceName,int64_t time,IffFile *g_iffFil
     mkdirs(filename);
 
     strcpy(dirname, filename);
-    updateSaveLastLen(dirname,g_iffFile);
+    if (updateSaveLastLen(dirname, g_iffFile) != 0 || isIFFFileDiskFull(g_iffFile))
+        return -1;
 
     strcat(filename, cur_time);
     strcat(filename, ".iff");
@@ -225,17 +224,27 @@ void IffFileSaveChannel(int i,char * data,int pointCount,IffFile *g_iffFile,int 
 {
     if(pointCount==0)
         return;
-    writeSection(g_iffFile, i, data, pointCount);
-    curfilesavelen += pointCount*size; //单次文件存储大小
-    testfilesavelen += pointCount*size; //单次试验存储大小
-}
-bool IffFileCheckSize(IffFile *g_iffFile)
-{
-    fflush(g_iffFile->m_filePtr);
-    int fd = fileno(g_iffFile->m_filePtr);
-    if (fd != -1)
+    uint32_t oldOffset = g_iffFile->m_curOffset;
+    if (!writeSection(g_iffFile, i, data, pointCount))
     {
-        fdatasync(fd);
+        g_iffFile->m_isDiskFull = 1;
+        return;
+    }
+    curfilesavelen += g_iffFile->m_curOffset - oldOffset; //单次文件存储大小
+    testfilesavelen += g_iffFile->m_curOffset - oldOffset; //单次试验存储大小
+}
+bool IffFileCheckSize(IffFile *g_iffFile, bool *fileCompleted)
+{
+    *fileCompleted = false;
+    if (g_iffFile->m_filePtr == NULL)
+        return false;
+    int fd = fileno(g_iffFile->m_filePtr);
+    if (g_iffFile->m_isDiskFull || ferror(g_iffFile->m_filePtr) ||
+        fflush(g_iffFile->m_filePtr) != 0 || fd == -1 || fdatasync(fd) != 0)
+    {
+        g_iffFile->m_isDiskFull = 1;
+        IffFileClose(g_iffFile);
+        return false;
     }
     if (testfilesaveLastlen <= testfilesavelen) //可用的总存储空间小于单次试验已经存入大小
     {
@@ -248,6 +257,7 @@ bool IffFileCheckSize(IffFile *g_iffFile)
     {
         if (IffFileNewFile(g_iffFile))
         {
+            *fileCompleted = true; // Previous IFF file has been closed.
             printf("create a new file savelen: %lld\n", curfilesavelen);
             curfilesavelen = 0;
         }
@@ -486,9 +496,12 @@ bool isIFFFileDiskFull(IffFile *g_iffFile)
 {
     return g_iffFile->m_isDiskFull == 1;
 }
-void updateSaveLastLen(char*fileroad, IffFile *g_iffFile)
+int updateSaveLastLen(char*fileroad, IffFile *g_iffFile)
 {
-    testfilesaveLastlen = SKY_GetDiskFreeZone(fileroad) - DISK_MIN_LEN; //可用的总存储空间
+    if (SKY_GetDiskFreeZone(fileroad, &g_iffFile->space) != 0)
+        return -1;
+    testfilesavelen = 0; // Rebase the written-byte counter with each disk query.
+    testfilesaveLastlen = g_iffFile->space.available_bytes; //可用的总存储空间
 
     if (testfilesaveLastlen <= 0)
     {
@@ -500,4 +513,5 @@ void updateSaveLastLen(char*fileroad, IffFile *g_iffFile)
         g_iffFile->m_isDiskFull = 0;
         //	printf("LastSaveSpace:%f GB!\n", testfilesaveLastlen / GB);
     }
+    return 0;
 }

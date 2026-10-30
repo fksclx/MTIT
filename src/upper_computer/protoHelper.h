@@ -174,6 +174,7 @@ enum CMDTYPE
     STARTTEST, // 开始试验（控制曲线输出，区别于 STARTDAQ）
     PAUSETEST, // 暂停试验（停止驱动输出，采集继续）
     STOPTEST, // 停止试验（停止驱动输出并切回 Random）
+    DISKSPACE,//硬盘查询
     CMDCOUNT
 };
 enum REPLYTYPE
@@ -239,6 +240,7 @@ enum REPLYTYPE
     INTERLOCKAPPLIED,       //总闭锁已执行
     TESTSTOPPED,            //试验输出已停止（控制曲线执行完毕或下位机主动停止）
     HIGHTEMP,
+    DISKSPACEREPLY,          //回复硬盘信息
     REPLYCMDCOUNT           //
 };
 

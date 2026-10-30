@@ -103,6 +103,7 @@ uint16_t wData[SAMPLES];
 
 static double d_mTime =0;//100MS
 
+
 static void stopTest()
 {
     allow_timeRun=false;
@@ -348,8 +349,9 @@ float executeAlgorithmPID(int loopIndex)
     //闭环算法
     //计算目标值
     createLoopClosePIDSetPoints(loopIndex);
+    float pidTarget = rtLoop[loopIndex].finalTargetValue;
     // 计算误差
-    float error = (rtLoop[loopIndex].finalTargetValue - rtLoop[loopIndex].feedbackValue)
+    float error = (pidTarget - rtLoop[loopIndex].feedbackValue)
                                                 / gRunParam.m_chnldefs.m_chnlParam[rtLoop[loopIndex].feedback_chnl]->kCoff;
     // 计算增量 Δu(k)
     float delta_output = pid->kp * (error - pid->prev_error) +
@@ -697,7 +699,7 @@ float executeAlgorithm6(int loopIndex)
     PID_Controller *pid =&rtLoop[loopIndex].pidControl;
     AlgorithmConstants* algorithmConstans=&rtLoop[loopIndex].algorithmConstans;
     AlgorithmFrameOutputs *frameOutputs=&rtLoop[loopIndex].frameOutputs;
-    frameOutputs->pv2Out = rtLoop[loopIndex].feedbackValue*(1-pid->param2)+frameOutputs->pv2Out*pid->param1;
+    frameOutputs->pv2Out = rtLoop[loopIndex].feedbackValue*(1-pid->param2)+frameOutputs->pv2Out*pid->param2;
     // 计算误差
     float error = 0;
     if(rtLoop[loopIndex].di_bool)
@@ -1046,7 +1048,6 @@ static void updateHotParamDAQ()
 //冷更新
 static void updateParamDAQ()
 {
-
     n_rtLoops=gRunParam.m_nLoops;
     for(int loopIndex=0;loopIndex<gRunParam.m_nLoops;loopIndex++)
     {

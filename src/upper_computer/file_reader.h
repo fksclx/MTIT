@@ -69,6 +69,7 @@ struct SectionAxisXHeader
 typedef struct IffFile
 {
 	FILE* m_filePtr;
+    DiskSpace space; // Save-thread snapshot, in bytes.
 	struct FileHeader m_fileHeader;
 	struct ChannelInformationHeader m_channelHeader;
 	struct ChannelInformation *m_pchaInfo;
@@ -109,9 +110,9 @@ char* IffFileName();
 int IffFileNewDir(char *fileRoad,char* deviceName,int64_t time,IffFile *g_iffFile);
 
 bool isIFFFileDiskFull(IffFile *g_iffFile);
-bool IffFileCheckSize(IffFile *g_iffFile);
+bool IffFileCheckSize(IffFile *g_iffFile, bool *fileCompleted);
 void IffFileSaveChannel(int i,char * data,int pointCount,IffFile *g_iffFile,int size);
 
 void UpdateFile(RunningParam* rp, IffFile *g_iffFile);
-void updateSaveLastLen(char*fileroad, IffFile *g_iffFile);
+int updateSaveLastLen(char*fileroad, IffFile *g_iffFile);
 

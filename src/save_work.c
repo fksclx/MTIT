@@ -22,6 +22,7 @@
 #include <fcntl.h>
 
 extern char normalSaveRoad[256];
+extern char dirname[100];
 extern char iffDeviceName[256];
 static int nIndexData;
 extern pthread_t thr_main;  //主线程
@@ -49,6 +50,22 @@ static int framePoints[MAX_CHANNEL];
 
 
 extern int LOOP_TIME_NEED; //ms值，单次凑齐读取100毫秒数据
+
+/* Publish a snapshot; only the main thread updates gRunParam.space. */
+static void notifyDiskSpace()
+{
+    if (updateSaveLastLen(isSaving ? dirname : normalSaveRoad, &g_IffFile) != 0)
+    {
+        perror("query save disk space");
+        return;
+    }
+    /* Reserve room for start/stop/error status packets. */
+    if ((gS2MFifoState.mask + 1 - (gS2MFifoState.in - gS2MFifoState.out)) < sizeof(DiskSpace) + sizeof(unsigned int) + 3 * (sizeof(int) + sizeof(unsigned int)))
+        return;
+    if (kfifo_write_pack(&gS2MFifoState, &g_IffFile.space,
+                         sizeof(g_IffFile.space)) == sizeof(g_IffFile.space))
+        pthread_kill(thr_main, sigStateS2M);
+}
 
 static int initEpoll()
 {
@@ -194,17 +211,11 @@ static int SaveStart()
     isSaving = false;
     InitIffFile(&g_IffFile); //先初始化
     UpdateFile(&gRunParam, &g_IffFile); //根据通道开辟空间
-    if (isIFFFileDiskFull(&g_IffFile))
-    {
-        SaveError();
-        SaveStop();
-        return -1;
-    }
-
     int i = IffFileNewDir(gRunParam.strSaveName, iffDeviceName,gRunParam.nStartSaveTime, &g_IffFile); //新时间存储文件夹
     if (i == 0)
     {
         isSaving = true;
+        notifyDiskSpace();
         int i = SAVESTARTED;
         kfifo_write_pack(&gS2MFifoState, &i, sizeof(i));
         pthread_kill(thr_main, sigStateS2M); //发出给主线程的信号
@@ -291,6 +302,7 @@ static void SaveStop()
     gRunParam.nSaveTimeDelay=0;
     DeinitIffFile(&g_IffFile); //每次都反初始化释放
     syncCMD();
+    notifyDiskSpace();
     isSaving = false;
 
     int b = SAVESTOPED;
@@ -334,12 +346,15 @@ static void saveFrame()
             char *data = dataPtr[i];
             IffFileSaveChannel(i,data, framePoints[i], &g_IffFile,size);
         }
-        if (!IffFileCheckSize(&g_IffFile))
+        bool fileCompleted = false;
+        if (!IffFileCheckSize(&g_IffFile, &fileCompleted))
         {
             SaveError();
             SaveStop();
             return;
         }
+        if (fileCompleted)
+            notifyDiskSpace();
     }
     return;
 }
@@ -354,6 +369,7 @@ void* save_run(void *arg)
     printf("save_thread ready\n");
     thread_wait_start();	//主线程开启
     printf("save_thread go\n");
+    notifyDiskSpace();
     while (run_untill_shutDown)
     {
         int waitnum = epoll_wait(saveEpollfd, wait_event, 10, 3000);
@@ -403,7 +419,7 @@ static void recvMainCMDSignal()
         printf("read failed.\n");
         return;
     }
-    int data_length = kfifo_read_pack(&gM2SFifoState, &gStatebuf, STATE_FIFO_SIZE);	//收到信号，从fifo中读取到数组
+    int data_length = kfifo_read_pack(&gM2SFifoState, &gStatebuf, sizeof(gStatebuf));	//收到信号，从fifo中读取到数组
     if (data_length <= 0)
         return;
     if (data_length != sizeof(int)) //收到的是rt指令,需要转发
@@ -444,8 +460,13 @@ static void recvMainCMDSignal()
     }
     else if (i == CLEARDATA)
     {
-        updateSaveLastLen(normalSaveRoad, &g_IffFile);
+        notifyDiskSpace();
     }
+    else if (i == DISKSPACE)    //查询磁盘空间，更新剩余空间
+    {
+        notifyDiskSpace();
+    }
+
 }
 static int64_t begin;
 static int64_t end;

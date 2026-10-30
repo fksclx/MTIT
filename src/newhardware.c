@@ -1478,9 +1478,6 @@ int main1()
     int result = 1;
 
 
-    (void)loop_log;
-
-
     memset(&action, 0, sizeof(action));
     action.sa_handler = request_stop;
     sigemptyset(&action.sa_mask);

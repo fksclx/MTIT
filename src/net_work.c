@@ -612,6 +612,11 @@ void ProcessCmd(uint8_t *cmdBuf, int cmdLen, int sockfd)
         sendSaveStart();
         break;
     }
+    case DISKSPACE:
+    {
+        sendSpaceCheck();
+        break;
+    }
     case STOPSAVE:
     {
         sprintf(logdata, "收到指令： 停止存储\n");
@@ -903,6 +908,12 @@ void sendSaveStart()
     pthread_kill(thr_save, sigCmdM2S); //发出给存储线程的信号
     kfifo_write_pack(&gM2PFifoState, &cmdReply, sizeof(cmdReply));
     pthread_kill(thr_process, sigCmdM2P); //发出给处理线程的信号
+}
+void sendSpaceCheck()
+{
+    cmdReply = DISKSPACE;
+    kfifo_write_pack(&gM2SFifoState, &cmdReply, sizeof(cmdReply));
+    pthread_kill(thr_save, sigCmdM2S); //发出给存储线程的信号
 }
 void sendSaveStop()
 {

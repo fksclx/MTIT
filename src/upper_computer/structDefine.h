@@ -9,6 +9,13 @@
 #include <string.h>
 #include "../tinyexpr.h"
 
+
+typedef struct DiskSpace{
+    uint64_t total_bytes;
+    uint64_t used_bytes;
+    int64_t available_bytes;
+} DiskSpace;
+
 typedef struct FactoryInfo
 {
     char m_productName[64];
@@ -295,7 +302,7 @@ typedef struct RunningParam
     int m_nLoops;
     struct LoopParamInfo **m_loopParam;
 
-
+    DiskSpace space;
     AlgorithmConstants algorithmConstans[10];
 
 } RunningParam;

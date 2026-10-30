@@ -10,9 +10,7 @@
 #include <stdio.h>
 #include <sys/signalfd.h> //信号
 #include <signal.h>
-#define KB 1024.0                       // 2^10
-#define MB 1048576.0                    // 2^20
-#define GB 1073741824.0                 // 2^30
+#include "structDefine.h"
 
 #define DATA_FIFO_SIZE 67108864//开辟FIFO大小 64MB  134217728
 #define STATE_FIFO_SIZE 64 //开辟FIFO大小
@@ -20,6 +18,7 @@
 #define LOG_DATA_SIZE 1024
 #define FRAME_MAX_SIZE 52428800  //50m 2097152大小用于固定内存单次FIFO发送存储帧长度
 #define STATE_MAX_SIZE 4  //4b大小用于固定内存单次FIFO发送存状态长度
+#define DISK_MIN_LEN (128ULL * 1024 * 1024) //磁盘剩余空间
 
 // MIN - MAX 中间有30个可用的
 #define sigDataR2P SIGRTMIN+9
@@ -53,6 +52,6 @@ int GetMacIpInfo(char* mac, char* ip);
 int64_t FileLength(FILE *fp);
 int mkdirs(char *muldir);
 int remove_dir(const char *dir);
-int64_t SKY_GetDiskFreeZone(const char *lpdiskpath); //获取路径下可用空间 单位字节
+int SKY_GetDiskFreeZone(const char *lpdiskpath, DiskSpace *space); //获取路径下可用空间 单位字节
 
 

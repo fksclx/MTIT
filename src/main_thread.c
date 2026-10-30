@@ -497,10 +497,16 @@ static void recvSaveStateSignal()
 		printf("read failed.\n");
 		return;
 	}
-	int data_length = kfifo_read_pack(&gS2MFifoState, &gStatebuf, STATE_FIFO_SIZE);	//收到信号，从fifo中读取到数组
+	char saveStatebuf[sizeof(DiskSpace)];
+    int data_length = kfifo_read_pack(&gS2MFifoState, saveStatebuf, sizeof(saveStatebuf));	//收到信号，从fifo中读取到数组
 	if (data_length <= 0)
 		return;
-	if (data_length != sizeof(int)) //收到的是rt指令,需要转发
+	if (data_length == sizeof(DiskSpace))
+    {
+        memcpy(&gRunParam.space, saveStatebuf, sizeof(gRunParam.space));
+        return;
+    }
+    if (data_length != sizeof(int)) //收到的是rt指令,需要转发
 	{
 		sprintf(gLogbuf, "收到save状态信号，但无法解析，长度为%d\n", data_length);
 		writelog(gLogbuf);
@@ -508,7 +514,7 @@ static void recvSaveStateSignal()
 		return;
 	}
 	int i = 0;
-	memcpy(&i, &gStatebuf, data_length);
+	memcpy(&i, saveStatebuf, data_length);
 	if (i == SAVESTARTED)
 	{
 		gRunParam.m_state.isSaving = true;

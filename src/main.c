@@ -158,7 +158,7 @@ int init()
     //初始化日志
     initLog();
     //获取磁盘空间
-    GetDiskInfo(currentRootRoad);
+    SKY_GetDiskFreeZone(currentRootRoad,&gRunParam.space);
     //参数初始化
     initRunParam();
     return 0;
